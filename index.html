@@ -1,0 +1,504 @@
+
+
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>360° 環景瀏覽器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Microsoft JhengHei', sans-serif;
+        }
+        .panorama-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+        .controls {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            display: flex;
+            gap: 10px;
+        }
+        .control-btn {
+            background-color: rgba(0, 0, 0, 0.5);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .control-btn:hover {
+            background-color: rgba(0, 0, 0, 0.7);
+            transform: scale(1.1);
+        }
+        .scene-selector {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            background-color: rgba(0, 0, 0, 0.5);
+            border-radius: 20px;
+            padding: 10px 20px;
+        }
+        .loading-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            color: white;
+        }
+        .spinner {
+            border: 5px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top: 5px solid #ffffff;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .info-panel {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background-color: rgba(0, 0, 0, 0.5);
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            max-width: 300px;
+            z-index: 10;
+            transform: translateX(120%);
+            transition: transform 0.3s ease;
+        }
+        .info-panel.visible {
+            transform: translateX(0);
+        }
+        .info-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background-color: rgba(0, 0, 0, 0.5);
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 11;
+            font-size: 20px;
+            border: none;
+        }
+    </style>
+</head>
+<body class="bg-gray-900">
+    <div class="loading-screen">
+        <div class="spinner"></div>
+        <p class="text-xl">載入中...</p>
+    </div>
+
+    <div class="panorama-container">
+        <div id="panorama"></div>
+        
+        <div class="scene-selector">
+            <select id="scene-select" class="bg-transparent text-white border-none outline-none">
+                <option value="scene1">山景</option>
+                <option value="scene2">海灘</option>
+                <option value="scene3">城市</option>
+            </select>
+        </div>
+        
+        <div class="controls">
+            <button class="control-btn" id="zoom-in">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    <line x1="11" y1="8" x2="11" y2="14"></line>
+                    <line x1="8" y1="11" x2="14" y2="11"></line>
+                </svg>
+            </button>
+            <button class="control-btn" id="zoom-out">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    <line x1="8" y1="11" x2="14" y2="11"></line>
+                </svg>
+            </button>
+            <button class="control-btn" id="reset-view">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+                    <path d="M3 3v5h5"></path>
+                </svg>
+            </button>
+        </div>
+        
+        <button class="info-btn" id="info-btn">i</button>
+        
+        <div class="info-panel" id="info-panel">
+            <h3 class="text-lg font-bold mb-2">使用說明</h3>
+            <p class="mb-2">• 拖曳畫面可以360度環視全景</p>
+            <p class="mb-2">• 使用滑鼠滾輪或縮放按鈕可放大縮小</p>
+            <p class="mb-2">• 從下拉選單選擇不同場景</p>
+            <p>• 點擊重置按鈕回到初始視角</p>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // 場景資料
+            const scenes = {
+                scene1: {
+                    url: createSkyBoxSVG('#4B79A1', '#283E51', 'mountain'),
+                    info: '壯麗的山景全景'
+                },
+                scene2: {
+                    url: createSkyBoxSVG('#36D1DC', '#5B86E5', 'beach'),
+                    info: '寧靜的海灘全景'
+                },
+                scene3: {
+                    url: createSkyBoxSVG('#3f4c6b', '#606c88', 'city'),
+                    info: '繁華的城市全景'
+                }
+            };
+
+            // 創建 Three.js 場景
+            let camera, scene, renderer;
+            let isUserInteracting = false;
+            let onPointerDownMouseX = 0, onPointerDownMouseY = 0;
+            let lon = 0, onPointerDownLon = 0;
+            let lat = 0, onPointerDownLat = 0;
+            let phi = 0, theta = 0;
+            
+            const container = document.getElementById('panorama');
+            
+            init();
+            animate();
+            
+            // 初始化場景
+            function init() {
+                camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 1100);
+                scene = new THREE.Scene();
+                
+                loadScene('scene1');
+                
+                renderer = new THREE.WebGLRenderer();
+                renderer.setPixelRatio(window.devicePixelRatio);
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                container.appendChild(renderer.domElement);
+                
+                document.addEventListener('pointerdown', onPointerDown);
+                document.addEventListener('wheel', onDocumentMouseWheel);
+                window.addEventListener('resize', onWindowResize);
+                
+                // 控制按鈕事件
+                document.getElementById('zoom-in').addEventListener('click', function() {
+                    if (camera.fov > 30) camera.fov -= 5;
+                    camera.updateProjectionMatrix();
+                });
+                
+                document.getElementById('zoom-out').addEventListener('click', function() {
+                    if (camera.fov < 100) camera.fov += 5;
+                    camera.updateProjectionMatrix();
+                });
+                
+                document.getElementById('reset-view').addEventListener('click', function() {
+                    lon = 0;
+                    lat = 0;
+                    camera.fov = 75;
+                    camera.updateProjectionMatrix();
+                });
+                
+                document.getElementById('scene-select').addEventListener('change', function() {
+                    loadScene(this.value);
+                });
+                
+                document.getElementById('info-btn').addEventListener('click', function() {
+                    document.getElementById('info-panel').classList.toggle('visible');
+                });
+                
+                // 隱藏載入畫面
+                setTimeout(() => {
+                    document.querySelector('.loading-screen').style.display = 'none';
+                }, 1500);
+            }
+            
+            // 載入場景
+            function loadScene(sceneId) {
+                // 移除舊的天空盒
+                scene.children.forEach(child => {
+                    if (child.isMesh) scene.remove(child);
+                });
+                
+                const sceneData = scenes[sceneId];
+                
+                // 創建新的天空盒
+                const geometry = new THREE.SphereGeometry(500, 60, 40);
+                geometry.scale(-1, 1, 1); // 將紋理翻轉到內側
+                
+                const texture = new THREE.TextureLoader().load(sceneData.url);
+                const material = new THREE.MeshBasicMaterial({ map: texture });
+                
+                const mesh = new THREE.Mesh(geometry, material);
+                scene.add(mesh);
+            }
+            
+            // 視窗大小變化
+            function onWindowResize() {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            }
+            
+            // 滑鼠按下事件
+            function onPointerDown(event) {
+                if (event.isPrimary === false) return;
+                
+                isUserInteracting = true;
+                
+                onPointerDownMouseX = event.clientX;
+                onPointerDownMouseY = event.clientY;
+                
+                onPointerDownLon = lon;
+                onPointerDownLat = lat;
+                
+                document.addEventListener('pointermove', onPointerMove);
+                document.addEventListener('pointerup', onPointerUp);
+            }
+            
+            // 滑鼠移動事件
+            function onPointerMove(event) {
+                if (event.isPrimary === false) return;
+                
+                lon = (onPointerDownMouseX - event.clientX) * 0.1 + onPointerDownLon;
+                lat = (event.clientY - onPointerDownMouseY) * 0.1 + onPointerDownLat;
+            }
+            
+            // 滑鼠放開事件
+            function onPointerUp() {
+                isUserInteracting = false;
+                document.removeEventListener('pointermove', onPointerMove);
+                document.removeEventListener('pointerup', onPointerUp);
+            }
+            
+            // 滑鼠滾輪事件
+            function onDocumentMouseWheel(event) {
+                const fov = camera.fov + event.deltaY * 0.05;
+                camera.fov = THREE.MathUtils.clamp(fov, 30, 100);
+                camera.updateProjectionMatrix();
+            }
+            
+            // 動畫循環
+            function animate() {
+                requestAnimationFrame(animate);
+                update();
+            }
+            
+            // 更新相機位置
+            function update() {
+                if (!isUserInteracting) {
+                    lon += 0.05;
+                }
+                
+                lat = Math.max(-85, Math.min(85, lat));
+                phi = THREE.MathUtils.degToRad(90 - lat);
+                theta = THREE.MathUtils.degToRad(lon);
+                
+                const x = 500 * Math.sin(phi) * Math.cos(theta);
+                const y = 500 * Math.cos(phi);
+                const z = 500 * Math.sin(phi) * Math.sin(theta);
+                
+                camera.lookAt(x, y, z);
+                renderer.render(scene, camera);
+            }
+            
+            // 創建天空盒 SVG 紋理
+            function createSkyBoxSVG(color1, color2, type) {
+                const canvas = document.createElement('canvas');
+                canvas.width = 2048;
+                canvas.height = 1024;
+                const ctx = canvas.getContext('2d');
+                
+                // 創建漸層背景
+                const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+                gradient.addColorStop(0, color1);
+                gradient.addColorStop(1, color2);
+                ctx.fillStyle = gradient;
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                // 根據類型添加元素
+                if (type === 'mountain') {
+                    drawMountains(ctx, canvas.width, canvas.height);
+                } else if (type === 'beach') {
+                    drawBeach(ctx, canvas.width, canvas.height);
+                } else if (type === 'city') {
+                    drawCity(ctx, canvas.width, canvas.height);
+                }
+                
+                return canvas.toDataURL();
+            }
+            
+            // 繪製山景
+            function drawMountains(ctx, width, height) {
+                // 遠山
+                ctx.fillStyle = 'rgba(60, 70, 90, 0.8)';
+                ctx.beginPath();
+                ctx.moveTo(0, height * 0.7);
+                
+                for (let i = 0; i < width; i += 50) {
+                    const y = height * 0.7 - Math.random() * height * 0.2;
+                    ctx.lineTo(i, y);
+                }
+                
+                ctx.lineTo(width, height * 0.7);
+                ctx.lineTo(width, height);
+                ctx.lineTo(0, height);
+                ctx.closePath();
+                ctx.fill();
+                
+                // 近山
+                ctx.fillStyle = 'rgba(40, 50, 70, 0.9)';
+                ctx.beginPath();
+                ctx.moveTo(0, height * 0.75);
+                
+                for (let i = 0; i < width; i += 30) {
+                    const y = height * 0.75 - Math.random() * height * 0.15;
+                    ctx.lineTo(i, y);
+                }
+                
+                ctx.lineTo(width, height * 0.75);
+                ctx.lineTo(width, height);
+                ctx.lineTo(0, height);
+                ctx.closePath();
+                ctx.fill();
+                
+                // 添加星星
+                ctx.fillStyle = 'white';
+                for (let i = 0; i < 200; i++) {
+                    const x = Math.random() * width;
+                    const y = Math.random() * height * 0.6;
+                    const size = Math.random() * 2;
+                    ctx.beginPath();
+                    ctx.arc(x, y, size, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+            
+            // 繪製海灘
+            function drawBeach(ctx, width, height) {
+                // 海洋
+                ctx.fillStyle = '#1a75ff';
+                ctx.fillRect(0, height * 0.6, width, height * 0.4);
+                
+                // 沙灘
+                ctx.fillStyle = '#f2d16b';
+                ctx.beginPath();
+                ctx.moveTo(0, height);
+                ctx.lineTo(width, height);
+                ctx.lineTo(width, height * 0.75);
+                
+                for (let i = width; i > 0; i -= 20) {
+                    const y = height * 0.75 + Math.sin(i * 0.01) * height * 0.03;
+                    ctx.lineTo(i, y);
+                }
+                
+                ctx.lineTo(0, height * 0.75);
+                ctx.closePath();
+                ctx.fill();
+                
+                // 太陽
+                ctx.fillStyle = '#ffdd00';
+                ctx.beginPath();
+                ctx.arc(width * 0.7, height * 0.3, 80, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // 雲朵
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+                drawCloud(ctx, width * 0.2, height * 0.2, 80);
+                drawCloud(ctx, width * 0.5, height * 0.15, 60);
+                drawCloud(ctx, width * 0.8, height * 0.25, 70);
+            }
+            
+            // 繪製雲朵
+            function drawCloud(ctx, x, y, size) {
+                ctx.beginPath();
+                ctx.arc(x, y, size * 0.5, 0, Math.PI * 2);
+                ctx.arc(x + size * 0.4, y - size * 0.2, size * 0.3, 0, Math.PI * 2);
+                ctx.arc(x + size * 0.4, y + size * 0.2, size * 0.3, 0, Math.PI * 2);
+                ctx.arc(x + size * 0.7, y, size * 0.4, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            
+            // 繪製城市
+            function drawCity(ctx, width, height) {
+                // 地面
+                ctx.fillStyle = '#333';
+                ctx.fillRect(0, height * 0.7, width, height * 0.3);
+                
+                // 遠處建築
+                for (let i = 0; i < width; i += 30) {
+                    const buildingHeight = Math.random() * height * 0.2 + height * 0.1;
+                    const buildingWidth = Math.random() * 20 + 10;
+                    
+                    ctx.fillStyle = `rgba(30, 30, 40, ${Math.random() * 0.5 + 0.5})`;
+                    ctx.fillRect(i, height * 0.7 - buildingHeight, buildingWidth, buildingHeight);
+                    
+                    // 窗戶
+                    ctx.fillStyle = 'rgba(255, 255, 150, 0.8)';
+                    for (let w = 0; w < buildingHeight; w += 10) {
+                        for (let h = 0; h < buildingWidth - 5; h += 5) {
+                            if (Math.random() > 0.3) {
+                                ctx.fillRect(i + h + 2, height * 0.7 - buildingHeight + w + 2, 3, 5);
+                            }
+                        }
+                    }
+                }
+                
+                // 近處建築
+                for (let i = 0; i < width; i += 60) {
+                    const buildingHeight = Math.random() * height * 0.3 + height * 0.15;
+                    const buildingWidth = Math.random() * 40 + 30;
+                    
+                    ctx.fillStyle = `rgba(20, 20, 30, ${Math.random() * 0.3 + 0.7})`;
+                    ctx.fillRect(i, height * 0.7 - buildingHeight, buildingWidth, buildingHeight);
+                    
+                    // 窗戶
+                    ctx.fillStyle = 'rgba(255, 255, 150, 0.8)';
+                    for (let w = 0; w < buildingHeight; w += 15) {
+                        for (let h = 0; h < buildingWidth - 10; h += 10) {
+                            if (Math.random() > 0.2) {
+                                ctx.fillRect(i + h + 5, height * 0.7 - buildingHeight + w + 5, 5, 8);
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    </script>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'94135c57274bf1ec',t:'MTc0NzQ4NzQ4Ny4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
